@@ -6,7 +6,7 @@
 
 <style>
 body{
-    background:#1a1a1a;
+    background:#222;
     color:white;
     font-family:sans-serif;
     display:flex;
@@ -18,12 +18,27 @@ body{
     text-align:center;
 }
 
+h1{
+    margin:10px;
+}
+
+#score{
+    font-size:20px;
+}
+
+#gameover{
+    font-size:26px;
+    color:red;
+}
+
 canvas{
+    background:#333;
     border-radius:10px;
 }
 
-#score{ font-size:20px; }
-#gameover{ color:red; font-size:24px; }
+#info{
+    margin-top:10px;
+}
 
 #side{
     width:200px;
@@ -34,22 +49,26 @@ canvas{
     padding:10px;
     border-radius:10px;
 }
+
+.item{
+    margin:5px 0;
+}
 </style>
 </head>
 
 <body>
 
 <div id="left">
-<h1>⚪ マージボール</h1>
-<div id="score">スコア: 0</div>
-<div id="gameover"></div>
-<canvas id="game" width="300" height="500"></canvas>
-<div>← → 移動 / ↓ 落とす</div>
+    <h1>⚪ マージボール</h1>
+    <div id="score">スコア: 0</div>
+    <div id="gameover"></div>
+    <canvas id="game" width="300" height="500"></canvas>
+    <div id="info">← → で移動 / ↓ で落とす</div>
 </div>
 
 <div id="side">
-<h3>スコア表</h3>
-<div class="table" id="scoreTable"></div>
+    <h3>スコア表</h3>
+    <div class="table" id="scoreTable"></div>
 </div>
 
 <script>
@@ -59,35 +78,40 @@ const ctx = canvas.getContext("2d");
 let score = 0;
 let gameOver = false;
 
-// ボール設定
+// ボール種類
 const balls = [
-{r:12, score:1, type:"pingpong"},
-{r:18, score:3, type:"tennis"},
-{r:22, score:6, type:"baseball"},
-{r:28, score:10, type:"rugby"},
-{r:32, score:20, type:"soccer"},
-{r:38, score:40, type:"basket"}
+{r:15, color:"#7fff7f", score:1},
+{r:20, color:"#00ff00", score:3},
+{r:25, color:"#ffff00", score:6},
+{r:30, color:"#ffa500", score:10},
+{r:35, color:"#ff4500", score:20},
+{r:40, color:"#ff0000", score:40}
 ];
 
-// スコア表
+// スコア表表示
 const table = document.getElementById("scoreTable");
 balls.forEach((b,i)=>{
-    let div=document.createElement("div");
-    div.innerHTML="Lv"+(i+1)+" : "+b.score;
+    let div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = `<span style="color:${b.color}">●</span> Lv${i+1} : ${b.score}`;
     table.appendChild(div);
 });
 
-let objects=[];
+let objects = [];
 
-// 操作中
-let current;
+// 操作中ボール
+let current = {
+    x:150,
+    y:20,
+    type:0,
+    active:true
+};
 
-// 新規ボール
+// 新しいボール
 function newBall(){
-    current={
+    current = {
         x:150,
-        y:30,
-        vy:0,
+        y:20,
         type:Math.floor(Math.random()*2),
         active:true
     };
@@ -99,134 +123,71 @@ function update(){
 
     // 落下中
     if(!current.active){
-        current.vy+=0.4;
-        current.y+=current.vy;
+        current.vy += 0.3;
+        current.y += current.vy;
 
-        for(let o of objects){
-            let dx=current.x-o.x;
-            let dy=current.y-o.y;
-            let dist=Math.sqrt(dx*dx+dy*dy);
-            let r=balls[current.type].r+balls[o.type].r;
-
-            if(dist<r){
-                // ⭐ 入れ替わり防止：上に固定
-                current.y = o.y - r;
-                current.vy = 0;
-            }
-        }
-
-        // 床
-        if(current.y>canvas.height-balls[current.type].r){
-            current.y=canvas.height-balls[current.type].r;
-            current.vy=0;
+        if(current.y > canvas.height - balls[current.type].r){
+            current.y = canvas.height - balls[current.type].r;
+            current.vy = 0;
             objects.push(current);
             newBall();
         }
     }
 
-    // 既存
+    // 既存ボール
     for(let o of objects){
-        o.vy+=0.3;
-        o.y+=o.vy;
+        o.vy += 0.3;
+        o.y += o.vy;
 
-        if(o.y>canvas.height-balls[o.type].r){
-            o.y=canvas.height-balls[o.type].r;
-            o.vy=0;
+        if(o.y > canvas.height - balls[o.type].r){
+            o.y = canvas.height - balls[o.type].r;
+            o.vy *= -0.3;
         }
     }
 
-    // 合体
-    for(let i=0;i<objects.length;i++){
-        for(let j=i+1;j<objects.length;j++){
-            let a=objects[i];
-            let b=objects[j];
+    // 衝突＆合体
+    let all = objects.slice();
 
-            let dx=a.x-b.x;
-            let dy=a.y-b.y;
-            let dist=Math.sqrt(dx*dx+dy*dy);
-            let r=balls[a.type].r+balls[b.type].r;
+    for(let i=0;i<all.length;i++){
+        for(let j=i+1;j<all.length;j++){
+            let a = all[i];
+            let b = all[j];
 
-            if(dist<r && a.type===b.type && a.type<balls.length-1){
-                a.type++;
-                a.x=(a.x+b.x)/2;
-                a.y=(a.y+b.y)/2;
+            let dx = a.x - b.x;
+            let dy = a.y - b.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            let r = balls[a.type].r + balls[b.type].r;
 
-                score+=balls[a.type].score;
-                document.getElementById("score").innerText="スコア: "+score;
+            if(dist < r){
+                if(a.type === b.type && a.type < balls.length-1){
+                    a.type++;
+                    a.x = (a.x + b.x)/2;
+                    a.y = (a.y + b.y)/2;
 
-                objects.splice(j,1);
-                j--;
+                    score += balls[a.type].score;
+                    document.getElementById("score").innerText = "スコア: " + score;
+
+                    objects.splice(objects.indexOf(b),1);
+                }else{
+                    let angle = Math.atan2(dy,dx);
+                    let overlap = r - dist;
+
+                    a.x += Math.cos(angle)*overlap/2;
+                    a.y += Math.sin(angle)*overlap/2;
+                    b.x -= Math.cos(angle)*overlap/2;
+                    b.y -= Math.sin(angle)*overlap/2;
+                }
             }
         }
     }
 
     // ゲームオーバー
     for(let o of objects){
-        if(o.y-balls[o.type].r<0){
-            gameOver=true;
-            document.getElementById("gameover").innerText=
-            "ゲームオーバー！ 最終スコア: "+score;
+        if(o.y - balls[o.type].r < 0){
+            gameOver = true;
+            document.getElementById("gameover").innerText =
+                "ゲームオーバー！ 最終スコア: " + score;
         }
-    }
-}
-
-// 体育館背景
-function drawBackground(){
-    ctx.fillStyle="#c69c6d"; // 木床
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-
-    ctx.strokeStyle="white";
-    ctx.lineWidth=2;
-
-    // センターライン
-    ctx.beginPath();
-    ctx.moveTo(0,250);
-    ctx.lineTo(300,250);
-    ctx.stroke();
-}
-
-// ボール描画
-function drawBall(x,y,type){
-    let b=balls[type];
-
-    ctx.beginPath();
-
-    if(b.type==="pingpong"){
-        ctx.fillStyle="white";
-        ctx.arc(x,y,b.r,0,Math.PI*2);
-        ctx.fill();
-    }
-
-    if(b.type==="tennis"){
-        ctx.fillStyle="yellow";
-        ctx.arc(x,y,b.r,0,Math.PI*2);
-        ctx.fill();
-    }
-
-    if(b.type==="baseball"){
-        ctx.fillStyle="white";
-        ctx.arc(x,y,b.r,0,Math.PI*2);
-        ctx.fill();
-        ctx.strokeStyle="red";
-        ctx.stroke();
-    }
-
-    if(b.type==="rugby"){
-        ctx.fillStyle="#8b4513";
-        ctx.ellipse(x,y,b.r,b.r*0.7,0,0,Math.PI*2);
-        ctx.fill();
-    }
-
-    if(b.type==="soccer"){
-        ctx.fillStyle="white";
-        ctx.arc(x,y,b.r,0,Math.PI*2);
-        ctx.fill();
-    }
-
-    if(b.type==="basket"){
-        ctx.fillStyle="orange";
-        ctx.arc(x,y,b.r,0,Math.PI*2);
-        ctx.fill();
     }
 }
 
@@ -234,13 +195,28 @@ function drawBall(x,y,type){
 function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    drawBackground();
+    // 落とす位置ガイド
+    if(current.active){
+        ctx.beginPath();
+        ctx.arc(current.x, current.y, balls[current.type].r, 0, Math.PI*2);
+        ctx.strokeStyle = "white";
+        ctx.stroke();
+    }
 
-    // 操作中も表示
-    drawBall(current.x,current.y,current.type);
+    // 現在のボール
+    if(!current.active){
+        ctx.beginPath();
+        ctx.arc(current.x, current.y, balls[current.type].r, 0, Math.PI*2);
+        ctx.fillStyle = balls[current.type].color;
+        ctx.fill();
+    }
 
+    // 固定ボール
     for(let o of objects){
-        drawBall(o.x,o.y,o.type);
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, balls[o.type].r, 0, Math.PI*2);
+        ctx.fillStyle = balls[o.type].color;
+        ctx.fill();
     }
 }
 
@@ -254,23 +230,30 @@ function loop(){
 loop();
 
 // 操作
-document.addEventListener("keydown",(e)=>{
+document.addEventListener("keydown", (e)=>{
     if(gameOver) return;
 
     if(current.active){
-        if(e.key==="ArrowLeft") current.x-=20;
-        if(e.key==="ArrowRight") current.x+=20;
-        if(e.key==="ArrowDown"){
-            current.active=false;
-            current.vy=0;
+        if(e.key === "ArrowLeft"){
+            current.x -= 20;
+        }
+        if(e.key === "ArrowRight"){
+            current.x += 20;
+        }
+        if(e.key === "ArrowDown"){
+            current.active = false;
+            current.vy = 0;
         }
 
-        if(current.x<0) current.x=0;
-        if(current.x>canvas.width) current.x=canvas.width;
+        // 範囲制限
+        if(current.x < 0) current.x = 0;
+        if(current.x > canvas.width) current.x = canvas.width;
     }
 });
 
+// 初期化
 newBall();
+
 </script>
 
 </body>
