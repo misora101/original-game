@@ -2,14 +2,20 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>ミニスイカゲーム風</title>
+<title>マージボール</title>
 
 <style>
 body{
     background:#222;
     color:white;
-    text-align:center;
     font-family:sans-serif;
+    display:flex;
+    justify-content:center;
+    gap:20px;
+}
+
+#left{
+    text-align:center;
 }
 
 h1{
@@ -21,33 +27,49 @@ h1{
 }
 
 #gameover{
-    font-size:28px;
+    font-size:26px;
     color:red;
-    margin:10px;
 }
 
 canvas{
     background:#333;
     border-radius:10px;
+}
+
+#info{
     margin-top:10px;
 }
 
-button{
-    margin-top:10px;
-    padding:10px 20px;
-    font-size:16px;
+#side{
+    width:200px;
+}
+
+.table{
+    background:#111;
+    padding:10px;
+    border-radius:10px;
+}
+
+.item{
+    margin:5px 0;
 }
 </style>
 </head>
 
 <body>
 
-<h1>🍉 ミニスイカゲーム風</h1>
-<div id="score">スコア: 0</div>
-<div id="gameover"></div>
-<canvas id="game" width="300" height="500"></canvas>
-<br>
-<button onclick="resetGame()">リスタート</button>
+<div id="left">
+    <h1>⚪ マージボール</h1>
+    <div id="score">スコア: 0</div>
+    <div id="gameover"></div>
+    <canvas id="game" width="300" height="500"></canvas>
+    <div id="info">← → で移動 / ↓ で落とす</div>
+</div>
+
+<div id="side">
+    <h3>スコア表</h3>
+    <div class="table" id="scoreTable"></div>
+</div>
 
 <script>
 const canvas = document.getElementById("game");
@@ -56,8 +78,8 @@ const ctx = canvas.getContext("2d");
 let score = 0;
 let gameOver = false;
 
-// フルーツ定義
-const fruits = [
+// ボール種類
+const balls = [
 {r:15, color:"#7fff7f", score:1},
 {r:20, color:"#00ff00", score:3},
 {r:25, color:"#ffff00", score:6},
@@ -66,57 +88,86 @@ const fruits = [
 {r:40, color:"#ff0000", score:40}
 ];
 
+// スコア表表示
+const table = document.getElementById("scoreTable");
+balls.forEach((b,i)=>{
+    let div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = `<span style="color:${b.color}">●</span> Lv${i+1} : ${b.score}`;
+    table.appendChild(div);
+});
+
 let objects = [];
 
-// 生成
-function spawn(x){
-    if(gameOver) return;
-    objects.push({
-        x:x,
+// 操作中ボール
+let current = {
+    x:150,
+    y:20,
+    type:0,
+    active:true
+};
+
+// 新しいボール
+function newBall(){
+    current = {
+        x:150,
         y:20,
-        vx:0,
-        vy:0,
-        type:Math.floor(Math.random()*2)
-    });
+        type:Math.floor(Math.random()*2),
+        active:true
+    };
 }
 
 // 更新
 function update(){
     if(gameOver) return;
 
+    // 落下中
+    if(!current.active){
+        current.vy += 0.3;
+        current.y += current.vy;
+
+        if(current.y > canvas.height - balls[current.type].r){
+            current.y = canvas.height - balls[current.type].r;
+            current.vy = 0;
+            objects.push(current);
+            newBall();
+        }
+    }
+
+    // 既存ボール
     for(let o of objects){
         o.vy += 0.3;
         o.y += o.vy;
 
-        // 床
-        if(o.y > canvas.height - fruits[o.type].r){
-            o.y = canvas.height - fruits[o.type].r;
+        if(o.y > canvas.height - balls[o.type].r){
+            o.y = canvas.height - balls[o.type].r;
             o.vy *= -0.3;
         }
     }
 
-    // 衝突＋合体
-    for(let i=0;i<objects.length;i++){
-        for(let j=i+1;j<objects.length;j++){
-            let a = objects[i];
-            let b = objects[j];
+    // 衝突＆合体
+    let all = objects.slice();
+
+    for(let i=0;i<all.length;i++){
+        for(let j=i+1;j<all.length;j++){
+            let a = all[i];
+            let b = all[j];
 
             let dx = a.x - b.x;
             let dy = a.y - b.y;
             let dist = Math.sqrt(dx*dx + dy*dy);
-            let r = fruits[a.type].r + fruits[b.type].r;
+            let r = balls[a.type].r + balls[b.type].r;
 
             if(dist < r){
-                if(a.type === b.type && a.type < fruits.length-1){
+                if(a.type === b.type && a.type < balls.length-1){
                     a.type++;
                     a.x = (a.x + b.x)/2;
                     a.y = (a.y + b.y)/2;
 
-                    score += fruits[a.type].score;
+                    score += balls[a.type].score;
                     document.getElementById("score").innerText = "スコア: " + score;
 
-                    objects.splice(j,1);
-                    j--;
+                    objects.splice(objects.indexOf(b),1);
                 }else{
                     let angle = Math.atan2(dy,dx);
                     let overlap = r - dist;
@@ -130,11 +181,12 @@ function update(){
         }
     }
 
-    // 🟥 ゲームオーバー判定（上に達したら）
+    // ゲームオーバー
     for(let o of objects){
-        if(o.y - fruits[o.type].r < 0){
+        if(o.y - balls[o.type].r < 0){
             gameOver = true;
-            document.getElementById("gameover").innerText = "ゲームオーバー！";
+            document.getElementById("gameover").innerText =
+                "ゲームオーバー！ 最終スコア: " + score;
         }
     }
 }
@@ -143,11 +195,27 @@ function update(){
 function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    for(let o of objects){
-        let f = fruits[o.type];
+    // 落とす位置ガイド
+    if(current.active){
         ctx.beginPath();
-        ctx.arc(o.x, o.y, f.r, 0, Math.PI*2);
-        ctx.fillStyle = f.color;
+        ctx.arc(current.x, current.y, balls[current.type].r, 0, Math.PI*2);
+        ctx.strokeStyle = "white";
+        ctx.stroke();
+    }
+
+    // 現在のボール
+    if(!current.active){
+        ctx.beginPath();
+        ctx.arc(current.x, current.y, balls[current.type].r, 0, Math.PI*2);
+        ctx.fillStyle = balls[current.type].color;
+        ctx.fill();
+    }
+
+    // 固定ボール
+    for(let o of objects){
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, balls[o.type].r, 0, Math.PI*2);
+        ctx.fillStyle = balls[o.type].color;
         ctx.fill();
     }
 }
@@ -161,21 +229,31 @@ function loop(){
 
 loop();
 
-// クリックで落とす
-canvas.addEventListener("click", (e)=>{
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    spawn(x);
+// 操作
+document.addEventListener("keydown", (e)=>{
+    if(gameOver) return;
+
+    if(current.active){
+        if(e.key === "ArrowLeft"){
+            current.x -= 20;
+        }
+        if(e.key === "ArrowRight"){
+            current.x += 20;
+        }
+        if(e.key === "ArrowDown"){
+            current.active = false;
+            current.vy = 0;
+        }
+
+        // 範囲制限
+        if(current.x < 0) current.x = 0;
+        if(current.x > canvas.width) current.x = canvas.width;
+    }
 });
 
-// リセット
-function resetGame(){
-    objects = [];
-    score = 0;
-    gameOver = false;
-    document.getElementById("score").innerText = "スコア: 0";
-    document.getElementById("gameover").innerText = "";
-}
+// 初期化
+newBall();
+
 </script>
 
 </body>
